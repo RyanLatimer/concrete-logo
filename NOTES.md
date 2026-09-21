@@ -17,7 +17,8 @@
 Leave-one-age-bin-out held-out sizes: 3:136, 7:126, 14:**62**, 28:425,
 56:**91**, 90:131, 180+:**59**. Bins 14 / 56 / 180+ are <100 rows.
 Bin mapping (`splits.py:age_to_bin`): `<=3 -> "3"`, `90..120 -> "90"`,
-`>=180 -> "180+"`. OPEN: keep with wide-CI caveat vs merge further.
+`>=180 -> "180+"`. DECIDED 2026-09-21: keep bins as-is (option A),
+report small-bin uncertainty via 3-seed std + one caveat sentence in paper.
 
 ## A1 has a gap by design
 Train Age<=28 (n=749), test Age>=90 (n=190). Ages 56..89 fall in neither set
