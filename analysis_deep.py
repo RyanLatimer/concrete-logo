@@ -1,0 +1,217 @@
+"""Deep analysis: SHAP, PDP, A3 heatmap, residuals, learning curves, stats.
+Run: micromamba run -n concrete-logo python analysis_deep.py
+Requires: shap (installed 2026-09-21), sklearn, seaborn.
+Outputs results/deep_*.csv + figures/fig{4,5,6,7,8}_*.png
+"""
+import os
+import numpy as np
+import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.inspection import PartialDependenceDisplay, permutation_importance
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.model_selection import learning_curve
+
+from splits import FEATURES, load_concrete, get_xy, random_split, age_a1, age_to_bin
+
+sns.set_theme(style="whitegrid", palette="colorblind")
+plt.rcParams.update({"font.size": 11, "figure.dpi": 150})
+
+os.makedirs("results", exist_ok=True)
+
+
+def train_rf_xgb(seed=0):
+    from experiments import make_model
+    df = load_concrete()
+    tr, _, te = random_split(df, seed=seed)
+    Xtr, ytr = get_xy(tr)
+    rf = make_model("RF", seed); rf.fit(Xtr, ytr)
+    xgb = make_model("XGB", seed); xgb.fit(Xtr, ytr)
+    return df, tr, te, rf, xgb
+
+
+def fig_shap():
+    import shap
+    df, tr, te, rf, xgb = train_rf_xgb()
+    Xtr, _ = get_xy(tr)
+    # TreeExplainer on the underlying estimator (after scaler, use transformed X)
+    # Pipeline: scaler -> model. Transform first for exact SHAP.
+    scaler = xgb.named_steps["standardscaler"]
+    est = xgb.named_steps["xgbregressor"]
+    Xt = scaler.transform(Xtr)
+    Xt = pd.DataFrame(Xt, columns=FEATURES)
+    expl = shap.TreeExplainer(est)
+    sv = expl.shap_values(Xt)
+    # Save mean|SHAP|
+    imp = pd.DataFrame({"feature": FEATURES,
+                        "mean_abs_shap": np.abs(sv).mean(0)}).sort_values(
+        "mean_abs_shap", ascending=False)
+    imp.to_csv("results/deep_shap_xgb.csv", index=False)
+    print(imp.to_string(index=False))
+
+    # Beeswarm (fancy)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5),
+                             gridspec_kw={"width_ratios": [1.3, 1]})
+    plt.sca(axes[0])
+    shap.summary_plot(sv, Xt, show=False, plot_size=None, max_display=7)
+    axes[0].set_title("(a) SHAP beeswarm (XGB, random-train, seed 0)")
+    axes[1].barh(imp["feature"][::-1], imp["mean_abs_shap"][::-1])
+    axes[1].set_title("(b) Mean |SHAP|")
+    axes[1].set_xlabel("Mean |SHAP value| (MPa)")
+    fig.suptitle("What drives predictions: age, cement, water dominate")
+    fig.tight_layout()
+    fig.savefig("figures/fig4_shap.png", dpi=200)
+    print("saved figures/fig4_shap.png")
+
+
+def fig_pdp():
+    df, tr, te, rf, xgb = train_rf_xgb()
+    Xtr, ytr = get_xy(tr)
+    Xtr = Xtr.astype(float)
+    fig, ax = plt.subplots(1, 3, figsize=(13, 4))
+    for i, feat in enumerate(["age", "cement", "water"]):
+        PartialDependenceDisplay.from_estimator(
+            xgb, Xtr, [feat], ax=ax[i], grid_resolution=50)
+        ax[i].set_title(f"PDP: {feat} (XGB)")
+    fig.suptitle("Partial dependence: strength rises steeply with age then plateaus; "
+                 "more cement helps, more water hurts")
+    fig.tight_layout()
+    fig.savefig("figures/fig5_pdp.png", dpi=200)
+    print("saved figures/fig5_pdp.png")
+
+
+def fig_a3_heatmap():
+    runs = pd.read_csv("results/summary.csv")
+    a3 = runs[runs["split"].str.startswith("A3-")].copy()
+    a3["bin"] = a3["split"].str.replace("A3-", "")
+    order = ["3", "7", "14", "28", "56", "90", "180+"]
+    piv = a3.pivot_table(index="model", columns="bin",
+                         values="r2_mean").reindex(columns=order)
+    piv.to_csv("results/deep_a3_r2.csv")
+    fig, ax = plt.subplots(figsize=(9, 3.5))
+    sns.heatmap(piv, annot=True, fmt=".2f", cmap="RdYlGn", center=0.4,
+                vmin=-0.5, vmax=0.9, ax=ax, cbar_kws={"label": "R² (mean, 3 seeds)"})
+    ax.set_title("A3 leave-one-age-bin-out R²: early bins fail, late bins look easy")
+    ax.set_xlabel("Held-out age bin")
+    fig.tight_layout()
+    fig.savefig("figures/fig6_a3_heatmap.png", dpi=200)
+    print("saved figures/fig6_a3_heatmap.png")
+    print(piv.round(3).to_string())
+
+
+def fig_residuals():
+    # Residual diagnostics for RF: random vs A1 vs C1 (seed 0 preds)
+    fig, axes = plt.subplots(2, 3, figsize=(13, 7), sharex=False)
+    for j, split in enumerate(["random", "A1", "C1"]):
+        d = pd.read_csv(f"results/preds_RF_{split}_s0.csv")
+        resid = d["y_pred"] - d["y_true"]
+        # top: residuals vs predicted
+        ax = axes[0, j]
+        ax.scatter(d["y_pred"], resid, s=12, alpha=0.5)
+        ax.axhline(0, color="r", ls="--", lw=1)
+        ax.set_title(f"{split}: resid vs pred (bias={resid.mean():+.2f} MPa)")
+        ax.set_xlabel("Predicted (MPa)")
+        if j == 0:
+            ax.set_ylabel("Residual (pred - true)")
+        # bottom: calibration by decile
+        ax2 = axes[1, j]
+        d["decile"] = pd.qcut(d["y_true"], 5, duplicates="drop")
+        cal = d.groupby("decile", observed=True).agg(
+            true=("y_true", "mean"), pred=("y_pred", "mean"))
+        ax2.plot(cal["true"], cal["pred"], "o-")
+        lo, hi = d["y_true"].min(), d["y_true"].max()
+        ax2.plot([lo, hi], [lo, hi], "r--", lw=1)
+        ax2.set_xlabel("True (binned mean)")
+        if j == 0:
+            ax2.set_ylabel("Pred (binned mean)")
+        ax2.set_title(f"{split}: calibration")
+    fig.suptitle("RF residuals (seed 0): random is unbiased; A1 systematically "
+                 "under-predicts old concrete")
+    fig.tight_layout()
+    fig.savefig("figures/fig7_residuals.png", dpi=200)
+    print("saved figures/fig7_residuals.png")
+
+
+def fig_learning_bias():
+    """Bias-variance view: per-bin bias of A1 model + learning curve random vs A1."""
+    from experiments import make_model
+    df = load_concrete()
+    dfb = df.copy(); dfb["age_bin"] = dfb["age"].map(age_to_bin)
+    tr, _ = age_a1(df)
+    Xtr, ytr = get_xy(tr)
+    m = make_model("XGB", 0); m.fit(Xtr, ytr)
+    dfb["pred"] = m.predict(dfb[FEATURES])
+    dfb["err"] = dfb["pred"] - dfb["strength"]
+    order = ["3", "7", "14", "28", "56", "90", "180+"]
+    g = dfb.groupby("age_bin")["err"].agg(["mean", "std", "count"]).reindex(order)
+    g.to_csv("results/deep_bias_by_age.csv")
+    print(g.round(3).to_string())
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+    axes[0].bar(order, g["mean"], yerr=g["std"] / np.sqrt(g["count"]),
+                capsize=4)
+    axes[0].axhline(0, color="r", ls="--", lw=1)
+    axes[0].set_title("(a) XGB A1-model bias per age bin (mean ± SE)")
+    axes[0].set_xlabel("Age bin"); axes[0].set_ylabel("Bias (pred - true, MPa)")
+    # learning curve on random split (XGB): does more data help? (in-distribution only)
+    from sklearn.model_selection import KFold
+    X, y = get_xy(df)
+    train_sizes, tr_s, va_s = learning_curve(
+        make_model("XGB", 0), X, y,
+        cv=KFold(n_splits=3, shuffle=True, random_state=0),
+        train_sizes=np.linspace(0.2, 1.0, 5),
+        scoring="r2", n_jobs=-1)
+    axes[1].plot(train_sizes, tr_s.mean(1), "o-", label="train")
+    axes[1].plot(train_sizes, va_s.mean(1), "s--", label="CV")
+    axes[1].set_title("(b) XGB learning curve (random CV — in-distribution)")
+    axes[1].set_xlabel("Train size"); axes[1].set_ylabel("R²")
+    axes[1].legend()
+    fig.suptitle("Bias grows outside train ages; in-distribution learning saturates early")
+    fig.tight_layout()
+    fig.savefig("figures/fig8_bias_learning.png", dpi=200)
+    print("saved figures/fig8_bias_learning.png")
+
+
+def stats_table():
+    """Paired seed-wise drop tests + bootstrap CI for headline drops."""
+    runs = pd.read_csv("results/runs.csv")
+    rng = np.random.default_rng(0)
+    lines = ["model,comparison,mean_drop_R2,bootstrap95CI"]
+    for model in ["RF", "XGB", "LR", "MLP"]:
+        for base, logo in [("random", "A1"), ("random", "C1"), ("random", "A2")]:
+            b = runs[(runs.model == model) & (runs.split == base)].sort_values(
+                "seed")["r2"].to_numpy()
+            l = runs[(runs.model == model) & (runs.split == logo)].sort_values(
+                "seed")["r2"].to_numpy()
+            # seeds differ for random (different test sets) -> unpaired; bootstrap the means
+            diffs = []
+            for _ in range(5000):
+                diffs.append(rng.choice(b, len(b), replace=True).mean()
+                             - rng.choice(l, len(l), replace=True).mean())
+            lo, hi = np.percentile(diffs, [2.5, 97.5])
+            lines.append(f"{model},{base}-{logo},{np.mean(b)-np.mean(l):.3f},"
+                         f"[{lo:.3f},{hi:.3f}]")
+    open("results/deep_drop_CI.csv", "w").write("\n".join(lines) + "\n")
+    print(open("results/deep_drop_CI.csv").read())
+    # permutation importance (RF, random-train) as SHAP cross-check
+    df, tr, te, rf, xgb = train_rf_xgb()
+    Xte, yte = get_xy(te)
+    pi = permutation_importance(rf, Xte, yte, n_repeats=10, random_state=0,
+                                n_jobs=-1)
+    piv = pd.DataFrame({"feature": FEATURES,
+                        "perm_mean": pi.importances_mean,
+                        "perm_std": pi.importances_std}).sort_values(
+        "perm_mean", ascending=False)
+    piv.to_csv("results/deep_permutation_RF.csv", index=False)
+    print(piv.round(4).to_string(index=False))
+
+
+if __name__ == "__main__":
+    fig_shap()
+    fig_pdp()
+    fig_a3_heatmap()
+    fig_residuals()
+    fig_learning_bias()
+    stats_table()

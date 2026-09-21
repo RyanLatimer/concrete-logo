@@ -1,0 +1,13 @@
+model,comparison,mean_drop_R2,bootstrap95CI
+RF,random-A1,0.553,[0.522,0.570]
+RF,random-C1,0.323,[0.292,0.341]
+RF,random-A2,1.068,[1.038,1.092]
+XGB,random-A1,0.532,[0.516,0.548]
+XGB,random-C1,0.252,[0.231,0.272]
+XGB,random-A2,0.906,[0.890,0.923]
+LR,random-A1,61.860,[61.832,61.914]
+LR,random-C1,0.561,[0.533,0.615]
+LR,random-A2,3.133,[3.105,3.187]
+MLP,random-A1,149.131,[126.588,192.560]
+MLP,random-C1,0.413,[0.219,0.608]
+MLP,random-A2,29.038,[26.526,30.415]
