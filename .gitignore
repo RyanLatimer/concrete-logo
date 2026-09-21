@@ -1,0 +1,9 @@
+# .gitignore for concrete-logo
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+figures/
+*.png
+.venv/
+HF_HOME/
+*.parquet

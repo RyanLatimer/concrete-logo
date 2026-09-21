@@ -1,0 +1,10 @@
+# Pinned 2026-09-21 from micromamba env `concrete-logo` (conda-forge, python=3.11).
+# Recreate with: micromamba create -n concrete-logo python=3.11 -c conda-forge --file requirements.txt
+# NOTE: requirements.txt uses pip-style pins; conda-forge names match except scikit-learn.
+scikit-learn==1.9.1
+pandas==3.0.6
+numpy==2.4.6
+matplotlib==3.11.2
+seaborn==0.13.2
+datasets==5.0.1
+xgboost==3.4.2
