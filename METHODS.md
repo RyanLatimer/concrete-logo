@@ -68,12 +68,19 @@ Early-age hold-outs fail; late-age hold-outs look easy (strength plateau) —
 discuss, don't hide.
 
 ## 6. Figures (`figures.py`, regenerates from `results/`)
+Main paper (3 — the README budget):
 - `figures/fig1_pred_vs_true.png`: RF pred-vs-true, random vs A1 vs C1 (seed 0).
 - `figures/fig2_error_vs_age.png`: RF trained on Age<=28, RMSE/MAE per age bin —
   in-train bins ~1.5–3.2 MPa, 56d 8.0, 90d 10.6, 180+d 9.9 MPa.
-- `figures/fig3_importance.png`: RF impurity importance — age 0.35, cement 0.31,
-  water 0.11, superplasticizer 0.10, slag 0.08, coarse_agg 0.04, fly_ash 0.02.
+- `figures/fig4_shap.png`: XGB SHAP beeswarm + mean|SHAP| (replaces impurity bars).
+Supplement:
+- `figures/fig5_pdp.png`, `figures/fig6_a3_heatmap.png`,
+  `figures/fig7_residuals.png`, `figures/age_histogram.png`.
+Dropped 2026-09-21: `fig3_importance.png` (redundant with SHAP),
+`fig8_bias_learning.png` (left duplicated Fig2, right learning curve tangential).
+Bias-per-bin numbers live in `results/deep_bias_by_age.csv` + Fig7 annotations.
 - Note: `figures/` is git-ignored; regenerate via `eda.py` + `figures.py`.
+No titles on any figure — captions live in the paper, panels identified by axis labels.
 
 ## 7. Deep analysis (2026-09-21, `analysis_deep.py`, adds `shap==0.51.0`)
 - Fig4 SHAP (XGB, random-train, seed 0): mean|SHAP| age 7.73, cement 6.98, water 3.60,
@@ -87,15 +94,9 @@ discuss, don't hide.
 - Fig7 residuals+calibration (RF seed 0): random bias −0.79 MPa, calibrated;
   A1 bias −9.33 MPa, calibration curve sags below diagonal (systematic under-prediction);
   C1 bias +2.68 MPa, wider scatter.
-- Fig8 bias+learning: XGB A1-model per-bin bias ≈0.0 (3/7/14/28d) then
-  −6.55 (56d), −9.25 (90d), −8.47 (180+d) MPa, SEs <0.6 — extrapolation bias, not noise.
-  Learning curve (shuffled 3-fold): CV R² 0.53→0.92 as train grows 130→690; train ≈0.99
-  (XGB overfit gap in-distribution, yet LOGO still fails — memorization ≠ extrapolation).
 - Stats (`results/deep_drop_CI.csv`, 5000-rep bootstrap of seed means):
   RF random−A1 drop 0.553 [0.522,0.570]; XGB random−A1 0.532 [0.516,0.548];
   RF random−C1 0.323 [0.292,0.341]. All CIs exclude 0 by a wide margin.
-- Fixed 2026-09-21: learning-curve CV now uses shuffled KFold (unshuffled folds on
-  age-ordered data understated CV by ~0.3).
 
 ## NOT yet done
 - Paper draft (IMRaD, 1500–2500 words) + novelty Scholar check + mentor sign-off.

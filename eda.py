@@ -49,7 +49,6 @@ def main():
     df["age"].hist(bins=14, ax=ax)
     ax.set_xlabel("Age (days)")
     ax.set_ylabel("Count")
-    ax.set_title("Concrete data: age distribution (heavily skewed to 28d)")
     fig.tight_layout()
     fig.savefig("figures/age_histogram.png", dpi=150)
     print("\nsaved figures/age_histogram.png")
