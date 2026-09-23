@@ -1,12 +1,14 @@
 """EDA: verify LOGO group sizes + age distribution. Run with:
     micromamba run -n concrete-logo python eda.py
-Saves figures/age_histogram.png. Uses splits.py as single source of truth.
+Saves figures/figS4_age_counts.png. Uses splits.py as single source of truth.
 """
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+import plot_style as ps
 
 from splits import (
     age_a1,
@@ -45,13 +47,30 @@ def main():
         flag = "  <-- WARNING: test <100 rows" if len(te) < 100 else ""
         print(f"  hold out {b:>4}: train={len(tr)} test={len(te)}{flag}")
 
-    fig, ax = plt.subplots(figsize=(8, 4))
-    df["age"].hist(bins=14, ax=ax)
-    ax.set_xlabel("Age (days)")
-    ax.set_ylabel("Count")
+    # Mix identity: rows sharing all six composition columns are the same
+    # recipe tested at different ages. Random splits put siblings on both sides.
+    comp = ["cement", "slag", "fly_ash", "water", "superplasticizer",
+            "coarse_agg"]
+    key = df[comp].astype(str).agg("|".join, axis=1)
+    print(f"\nunique mixes: {key.nunique()} "
+          f"(tested at >1 age: {(df.groupby(comp)['age'].nunique() > 1).sum()})")
+    for seed in (0, 1, 2):
+        tr, _, te = random_split(df, seed=seed)
+        share = key[te.index].isin(set(key[tr.index])).mean()
+        print(f"random seed={seed}: {share:.0%} of test rows share a mix with train")
+
+    ps.apply()
+    counts = df["age"].value_counts().sort_index()
+    fig, ax = plt.subplots(figsize=(5.2, 2.4))
+    ax.bar(counts.index.astype(str), counts.values, color=ps.BLUE, width=0.7)
+    for i, v in enumerate(counts.values):
+        ax.text(i, v + 6, str(v), ha="center", fontsize=7, color=ps.INK_2)
+    ax.grid(axis="x", visible=False)
+    ax.set_xlabel("Age at test (days)")
+    ax.set_ylabel("Rows")
     fig.tight_layout()
-    fig.savefig("figures/age_histogram.png", dpi=150)
-    print("\nsaved figures/age_histogram.png")
+    fig.savefig("figures/figS4_age_counts.png")
+    print("\nsaved figures/figS4_age_counts.png")
 
 
 if __name__ == "__main__":

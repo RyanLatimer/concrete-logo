@@ -67,7 +67,7 @@ A3-LOGO (RF seed-mean R2): hold-3 -0.10, 7: 0.55, 14: -0.37, 28: 0.36,
 Early-age hold-outs fail; late-age hold-outs look easy (strength plateau) —
 discuss, don't hide.
 
-## 6. Figures (`figures.py`, regenerates from `results/`)
+## 6. Figures (`figures.py`, regenerates from `results/`) — SUPERSEDED by §8
 Main paper (3 — the README budget):
 - `figures/fig1_pred_vs_true.png`: RF pred-vs-true, random vs A1 vs C1 (seed 0).
 - `figures/fig2_error_vs_age.png`: RF trained on Age<=28, RMSE/MAE per age bin —
@@ -101,3 +101,23 @@ No titles on any figure — captions live in the paper, panels identified by axi
 ## NOT yet done
 - Paper draft (IMRaD, 1500–2500 words) + novelty Scholar check + mentor sign-off.
 - SHAP (optional; impurity importance done as brief Fig 3).
+
+## 8. Final paper + figure restyle (2026-09-23)
+- All figures share `plot_style.py` (one font, validated palette, light chrome).
+  Paper figures (4): `fig1_pred_vs_true` (RF, R²/RMSE/bias annotated),
+  `fig2_error_vs_age`, `fig3_a3_heatmap` (diverging at R²=0, clipped at −1),
+  `fig4_age_response` (RF partial dependence on age: all-ages vs ≤28 d train).
+  Supplement only: `figS1_shap`, `figS2_pdp`, `figS3_residuals`, `figS4_age_counts`.
+  Old `fig4_shap`…`fig7_residuals`, `age_histogram` names are retired.
+- **Fig2 fix:** the old per-bin errors for ≤28 d bins were in-sample (RF scored on
+  its own training rows). `figures.py` now uses 5-fold OOF for those bins.
+  Corrected: in-range RMSE 4.4–6.2 MPa, bias within ±1.2; 56/90/180+ d
+  RMSE 8.0/10.6/9.9, bias −7.2/−9.6/−8.7 MPa (`results/error_vs_age_RF_A1train.csv`).
+- Fig4: ≤28 d RF is flat at 38.2 MPa for every age >28; all-ages RF reaches 48.7 at 365 d.
+- Mix identity (`eda.py`): 426 unique mixes (181 tested at >1 age); 69–80% of random
+  test rows share a mix with a training row.
+- Paper: `paper/build_paper.js` → `paper/Latimer_concrete_LOGO.docx`
+  (`NODE_PATH=<dir with docx npm pkg>/node_modules node paper/build_paper.js`).
+  Tables are generated from `results/summary.csv` + `results/cv.csv`.
+- Bootstrap CIs in `deep_drop_CI.csv` resample only 3 seed values, so they are not
+  reported in the paper; the paper compares the drop to seed spread directly.
